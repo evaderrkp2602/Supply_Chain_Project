@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHG Vehicle Routing Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #12131C;
+    --surface: rgba(255,255,255,0.025);
+    --surface-hover: rgba(255,255,255,0.045);
+    --border: rgba(255,255,255,0.06);
+    --border-strong: rgba(255,255,255,0.1);
+    --text: #E2E4EA;
+    --text-dim: rgba(255,255,255,0.45);
+    --text-faint: rgba(255,255,255,0.25);
+    --accent-red: #E06C75;
+    --accent-yellow: #E5C07B;
+    --accent-blue: #61AFEF;
+    --accent-purple: #C678DD;
+    --accent-green: #98C379;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    z-index: 9999;
+  }
+
+  .container {
+    max-width: 1140px;
+    margin: 0 auto;
+    padding: 32px 24px;
+  }
+
+  /* Header */
+  .header { margin-bottom: 32px; animation: fadeUp 0.6s ease-out; }
+  .header-tag {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    font: 600 10px/1 var(--mono); color: var(--text-faint); letter-spacing: 2.5px; text-transform: uppercase;
+  }
+  .header-tag .dot { width: 7px; height: 7px; border-radius: 2px; background: var(--accent-green); }
+  .header h1 { font: 700 32px/1.15 var(--sans); letter-spacing: -0.5px; color: #fff; }
+  .header p { font: 400 13px/1.6 var(--sans); color: var(--text-dim); margin-top: 8px; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 2px; margin-bottom: 24px;
+    background: var(--surface); border-radius: 8px; padding: 3px; width: fit-content;
+    animation: fadeUp 0.6s ease-out 0.1s both;
+  }
+  .tab-btn {
+    padding: 9px 20px; border-radius: var(--radius-sm); border: none; cursor: pointer;
+    font: 500 12px/1 var(--mono); background: transparent; color: var(--text-dim);
+    transition: all 0.2s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { background: rgba(97,175,239,0.14); color: var(--accent-blue); }
+
+  /* Method Pills */
+  .pills {
+    display: flex; gap: 6px; margin-bottom: 26px; flex-wrap: wrap;
+    animation: fadeUp 0.6s ease-out 0.15s both;
+  }
+  .pill {
+    padding: 6px 16px; border-radius: 20px; border: 1.5px solid var(--border);
+    background: transparent; color: var(--text-dim); cursor: pointer;
+    font: 600 12px/1 var(--mono); transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+  }
+  .pill .pip { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .pill:hover { border-color: var(--border-strong); color: var(--text); }
+  .pill.active { background: color-mix(in srgb, var(--c) 8%, transparent); border-color: var(--c); color: var(--c); }
+
+  /* Cards / Panels */
+  .panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px 24px; margin-bottom: 20px;
+  }
+  .panel-title {
+    font: 600 13px/1 var(--mono); color: rgba(255,255,255,0.55); margin-bottom: 14px;
+  }
+  .panel-sub { font: 400 11px/1.4 var(--sans); color: var(--text-faint); margin: -8px 0 14px; }
+
+  /* KPI Grid */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; position: relative; overflow: hidden; transition: border-color 0.2s;
+  }
+  .kpi:hover { border-color: var(--border-strong); }
+  .kpi.best { background: rgba(152,195,121,0.05); border-color: rgba(152,195,121,0.2); }
+  .kpi .best-tag {
+    position: absolute; top: 7px; right: 10px;
+    font: 600 8px/1 var(--mono); color: var(--accent-green); letter-spacing: 1.2px; text-transform: uppercase;
+  }
+  .kpi-label { font: 500 10px/1 var(--mono); color: var(--text-dim); letter-spacing: 0.6px; margin-bottom: 6px; }
+  .kpi-value { font: 700 28px/1.1 var(--mono); color: var(--text); }
+  .kpi-sub { font: 400 10px/1.3 var(--sans); color: var(--text-faint); margin-top: 5px; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; min-width: 680px; }
+  th {
+    padding: 10px 12px; text-align: left; font: 500 10px/1 var(--mono); color: var(--text-dim);
+    letter-spacing: 0.5px; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
+    white-space: nowrap; background: rgba(255,255,255,0.015);
+  }
+  th:hover { color: var(--text); }
+  td {
+    padding: 9px 12px; font: 400 12px/1.3 var(--mono); border-bottom: 1px solid rgba(255,255,255,0.025);
+    white-space: nowrap;
+  }
+  tr:hover td { background: rgba(255,255,255,0.015); }
+  tr.overnight td { background: rgba(198,120,221,0.04); }
+
+  /* Day filter buttons */
+  .day-filters { display: flex; gap: 5px; margin-bottom: 12px; flex-wrap: wrap; }
+  .day-btn {
+    padding: 5px 14px; border-radius: var(--radius-sm); border: none; cursor: pointer;
+    font: 500 11px/1 var(--mono); background: rgba(255,255,255,0.03); color: var(--text-dim);
+    transition: all 0.15s;
+  }
+  .day-btn:hover { background: rgba(255,255,255,0.06); }
+  .day-btn.active { background: rgba(97,175,239,0.15); color: var(--accent-blue); }
+
+  /* Cap bar */
+  .cap-bar { display: flex; align-items: center; gap: 6px; }
+  .cap-track { width: 50px; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.06); overflow: hidden; }
+  .cap-fill { height: 100%; border-radius: 3px; }
+  .cap-label { font-size: 10px; color: var(--text-faint); }
+
+  /* Distribution */
+  .dist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
+  .dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .dist-label { width: 55px; font: 400 10px/1 var(--mono); color: var(--text-faint); }
+  .dist-track { flex: 1; height: 14px; background: rgba(255,255,255,0.03); border-radius: 3px; overflow: hidden; }
+  .dist-fill { height: 100%; border-radius: 3px; opacity: 0.6; }
+  .dist-count { width: 22px; font: 500 11px/1 var(--mono); color: var(--text-dim); text-align: right; }
+
+  /* Compare selectors */
+  .compare-controls { display: flex; gap: 16px; margin-bottom: 24px; align-items: flex-end; flex-wrap: wrap; }
+  .compare-controls label { display: block; font: 500 10px/1 var(--mono); color: var(--text-faint); margin-bottom: 5px; }
+  .compare-controls select {
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 9px 14px; color: var(--text); font: 500 12px/1 var(--mono); appearance: auto;
+  }
+  .compare-vs { padding-bottom: 10px; font: 600 16px/1 var(--sans); color: var(--text-faint); }
+
+  /* Legend */
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font: 400 10px/1 var(--mono); color: var(--text-dim); }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* Algo cards */
+  .algo-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px 24px; margin-bottom: 14px; cursor: pointer; transition: all 0.2s;
+  }
+  .algo-card:hover { border-color: var(--border-strong); }
+  .algo-card.active-card { border-color: var(--c); background: color-mix(in srgb, var(--c) 4%, transparent); }
+  .algo-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .algo-header .name { font: 700 16px/1 var(--sans); }
+  .algo-header .desc { font: 400 11px/1 var(--mono); color: var(--text-faint); }
+  .algo-header .rec {
+    font: 600 9px/1 var(--mono); background: rgba(152,195,121,0.12); color: var(--accent-green);
+    padding: 3px 10px; border-radius: 10px; letter-spacing: 0.5px;
+  }
+  .algo-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+  .algo-grid .col-title { font: 500 10px/1 var(--mono); color: var(--text-faint); letter-spacing: 0.5px; margin-bottom: 5px; }
+  .algo-grid .col-body { font: 400 12px/1.55 var(--sans); color: rgba(255,255,255,0.65); }
+  .algo-stats {
+    display: flex; gap: 22px; margin-top: 16px; padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.04); flex-wrap: wrap;
+  }
+  .algo-stats span { font: 400 11px/1 var(--mono); color: var(--text-faint); }
+
+  /* Feature matrix dot */
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.on { background: var(--accent-green); }
+  .dot.off { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); }
+
+  /* Heatmap cell */
+  .heat { font: 600 12px/1 var(--mono); padding: 4px 10px; border-radius: 4px; display: inline-block; }
+
+  /* Footer */
+  .footer {
+    margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border);
+    font: 400 10px/1 var(--mono); color: var(--text-faint); text-align: center;
+  }
+
+  /* Hide inactive tabs */
+  .tab-content { display: none; animation: fadeUp 0.4s ease-out; }
+  .tab-content.visible { display: block; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .container { padding: 20px 14px; }
+    .header h1 { font-size: 24px; }
+    .tabs { flex-wrap: wrap; width: 100%; }
+    .algo-grid { grid-template-columns: 1fr; }
+    .dist-grid { grid-template-columns: 1fr; }
+    .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-tag"><div class="dot"></div>NHG LOGISTICS</div>
+    <h1>Vehicle Routing Dashboard</h1>
+    <p>Wilmington DC → 123 stores, 261 weekly orders &nbsp;|&nbsp; Van: 3,200 ft³ &nbsp;|&nbsp; DOT: 11h drive / 14h duty / 10h break</p>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabs"></div>
+
+  <!-- Method Pills -->
+  <div class="pills" id="pills"></div>
+
+  <!-- Tab: Overview -->
+  <div class="tab-content" id="tab-overview">
+    <div class="kpi-grid" id="kpi-grid"></div>
+    <div class="panel" id="waterfall-panel">
+      <div class="panel-title">Weekly Miles Savings vs Q1 NN Baseline</div>
+      <div id="waterfall-chart"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Algorithm Feature Matrix</div>
+      <div class="table-wrap" id="feature-matrix"></div>
+    </div>
+  </div>
+
+  <!-- Tab: Daily -->
+  <div class="tab-content" id="tab-daily">
+    <div class="panel">
+      <div class="panel-title">Daily Miles by Method</div>
+      <div class="panel-sub">Weekly distance comparison across all 5 solution methods</div>
+      <div class="legend" id="daily-legend"></div>
+      <div id="daily-bar-chart"></div>
+    </div>
+    <div class="panel" style="margin-top:20px">
+      <div class="panel-title">% Miles Reduction vs Q1 NN Baseline</div>
+      <div class="table-wrap" id="heatmap-table"></div>
+    </div>
+  </div>
+
+  <!-- Tab: Routes -->
+  <div class="tab-content" id="tab-routes">
+    <div id="route-info" style="margin-bottom:14px; font: 400 13px/1.4 var(--sans); color: var(--text-dim);"></div>
+    <div class="panel">
+      <div class="day-filters" id="route-day-filters"></div>
+      <div class="table-wrap" id="route-table-wrap"></div>
+      <div id="route-count" style="margin-top:8px; font: 400 10px/1 var(--mono); color: var(--text-faint);"></div>
+    </div>
+    <div class="dist-grid" id="route-distributions"></div>
+  </div>
+
+  <!-- Tab: Compare -->
+  <div class="tab-content" id="tab-compare">
+    <div class="compare-controls" id="compare-controls"></div>
+    <div class="table-wrap" id="compare-table"></div>
+    <div class="panel" style="margin-top:24px">
+      <div class="panel-title">Daily Miles Comparison</div>
+      <div id="compare-bar-chart"></div>
+      <div id="compare-legend" style="display:flex; gap:16px; justify-content:center; margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- Tab: Guide -->
+  <div class="tab-content" id="tab-guide"></div>
+
+  <div class="footer">NHG Vehicle Routing Problem — 5-Method Comparison Dashboard &nbsp;|&nbsp; Data: 123 stores, 261 orders/week, Wilmington DC</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════
+const METHODS = ["Q1 NN","Q1 CW","Q1 CW+ON","Q2 Hetero","Q3 Relaxed"];
+const MSHORT = {"Q1 NN":"NN","Q1 CW":"CW","Q1 CW+ON":"CW+ON","Q2 Hetero":"Hetero","Q3 Relaxed":"Relaxed"};
+const MLABEL = {"Q1 NN":"Nearest-Neighbor + 2-Opt","Q1 CW":"Clark-Wright + 2-Opt","Q1 CW+ON":"CW + 2-Opt + Overnight","Q2 Hetero":"CW+NN + Overnight (Van+ST)","Q3 Relaxed":"Angular Sweep + CW + Overnight"};
+const COLORS = {"Q1 NN":"#E06C75","Q1 CW":"#E5C07B","Q1 CW+ON":"#61AFEF","Q2 Hetero":"#C678DD","Q3 Relaxed":"#98C379"};
+const DAYS = ["Mon","Tue","Wed","Thu","Fri"];
+
+const KPI = {
+  weeklyMiles:{"Q1 NN":9538,"Q1 CW":7904,"Q1 CW+ON":7731,"Q2 Hetero":8645,"Q3 Relaxed":5538},
+  annualMiles:{"Q1 NN":495976,"Q1 CW":411008,"Q1 CW+ON":402012,"Q2 Hetero":449540,"Q3 Relaxed":287976},
+  totalRoutes:{"Q1 NN":34,"Q1 CW":33,"Q1 CW+ON":28,"Q2 Hetero":34,"Q3 Relaxed":27},
+  overnightRoutes:{"Q1 NN":0,"Q1 CW":0,"Q1 CW+ON":5,"Q2 Hetero":5,"Q3 Relaxed":3},
+  minVehicles:{"Q1 NN":8,"Q1 CW":8,"Q1 CW+ON":8,"Q2 Hetero":9,"Q3 Relaxed":8},
+  ordersPerRoute:{"Q1 NN":7.68,"Q1 CW":7.91,"Q1 CW+ON":9.32,"Q2 Hetero":7.68,"Q3 Relaxed":9.67},
+  milesPerRoute:{"Q1 NN":280.5,"Q1 CW":239.5,"Q1 CW+ON":276.1,"Q2 Hetero":254.3,"Q3 Relaxed":205.1},
+};
+
+const DAILY = {
+  Mon:{"Q1 NN":1886,"Q1 CW":1525,"Q1 CW+ON":1688,"Q2 Hetero":2144,"Q3 Relaxed":1196},
+  Tue:{"Q1 NN":2042,"Q1 CW":1943,"Q1 CW+ON":2114,"Q2 Hetero":2179,"Q3 Relaxed":1712},
+  Wed:{"Q1 NN":1574,"Q1 CW":1424,"Q1 CW+ON":1519,"Q2 Hetero":1172,"Q3 Relaxed":1055},
+  Thu:{"Q1 NN":2100,"Q1 CW":1539,"Q1 CW+ON":937,"Q2 Hetero":1838,"Q3 Relaxed":325},
+  Fri:{"Q1 NN":1936,"Q1 CW":1473,"Q1 CW+ON":1473,"Q2 Hetero":1312,"Q3 Relaxed":1250},
+};
+
+const FEAT = {
+  "Q1 NN":{fleet:"Van",sched:"Fixed",cons:"NN",opt:true,on:false,reday:false},
+  "Q1 CW":{fleet:"Van",sched:"Fixed",cons:"CW",opt:true,on:false,reday:false},
+  "Q1 CW+ON":{fleet:"Van",sched:"Fixed",cons:"CW",opt:true,on:true,reday:false},
+  "Q2 Hetero":{fleet:"Van+ST",sched:"Fixed",cons:"CW",opt:true,on:true,reday:false},
+  "Q3 Relaxed":{fleet:"Van",sched:"Relaxed",cons:"CW",opt:true,on:true,reday:true},
+};
+
+const GUIDE = [
+  {m:"Q1 NN",s:"Fast to compute, intuitive logic, always feasible, good baseline",w:"Greedy; misses global savings, 17% more miles than CW, no overnight merging",u:"Quick baseline or when simplicity is paramount"},
+  {m:"Q1 CW",s:"Better than NN on all days, saves ~1,634 mi/wk vs NN, good DOT compliance",w:"No overnight merging, fixed delivery days, van-only",u:"Overnight not feasible, fixed schedule required"},
+  {m:"Q1 CW+ON",s:"173 mi/wk from overnight, reduces routes to 28, same vehicles as CW",w:"Needs sleeper cabs, more complex scheduling, fixed days",u:"Overnight ops acceptable, sleeper cabs available"},
+  {m:"Q2 Hetero",s:"Handles ST-required orders, full regulatory compliance, mixed fleet",w:"More miles than CW+ON, needs both fleets, complex dispatch, fixed days",u:"When 60 orders REQUIRE Straight Truck"},
+  {m:"Q3 Relaxed",s:"Fewest routes (27), lowest miles (5,538/wk), 28% reduction, geographic clustering",w:"Changes delivery days, requires NHG renegotiation",u:"RECOMMENDED if NHG can relax fixed delivery schedule"},
+];
+
+const ROUTES={"Q1 NN":[{id:1,day:"Mon",orders:14,miles:114,cap:65.4,stops:"Billerica → Weston → ... → Boston → Charlestown"},{id:2,day:"Mon",orders:9,miles:257,cap:97,stops:"Charlestown → Dayville → ... → East Hartford"},{id:3,day:"Mon",orders:7,miles:403,cap:75.9,stops:"North Berwick → Hartford → ... → Windsor Locks"},{id:4,day:"Mon",orders:9,miles:353,cap:62,stops:"Groton → Groton → ... → Bethany"},{id:5,day:"Mon",orders:2,miles:357,cap:9.1,stops:"Fairfield → Wilton"},{id:6,day:"Mon",orders:2,miles:402,cap:10.2,stops:"Burlington → Burlington"},{id:7,day:"Tue",orders:16,miles:67,cap:97.3,stops:"Wilmington → Billerica → ... → Boston"},{id:8,day:"Tue",orders:12,miles:165,cap:77.3,stops:"North Andover → ... → Cambridge"},{id:9,day:"Tue",orders:2,miles:354,cap:12,stops:"Parsonsfield → Rumford"},{id:10,day:"Tue",orders:11,miles:279,cap:65,stops:"Enfield → ... → Manchester"},{id:11,day:"Tue",orders:2,miles:411,cap:13.9,stops:"Hanover → West Hartland"},{id:12,day:"Tue",orders:9,miles:373,cap:57,stops:"Groton → ... → Middletown"},{id:13,day:"Tue",orders:6,miles:393,cap:38,stops:"Norwalk → Stamford → ... → Stamford"},{id:14,day:"Wed",orders:5,miles:54,cap:99.5,stops:"Tewksbury → Lowell → Woburn → Medford"},{id:15,day:"Wed",orders:14,miles:132,cap:74.2,stops:"Woburn → ... → Worcester"},{id:16,day:"Wed",orders:5,miles:327,cap:99.9,stops:"Rockland → Duxbury → ... → Windsor"},{id:17,day:"Wed",orders:9,miles:328,cap:98.8,stops:"Smithfield → ... → Storrs Mansfield"},{id:18,day:"Wed",orders:10,miles:337,cap:48.4,stops:"Keene → ... → Plainville"},{id:19,day:"Wed",orders:7,miles:396,cap:54,stops:"Hamden → ... → Bethany"},{id:20,day:"Thu",orders:10,miles:125,cap:99.4,stops:"Reading → ... → Manchester"},{id:21,day:"Thu",orders:18,miles:69,cap:83.2,stops:"Boston → ... → Weston"},{id:22,day:"Thu",orders:4,miles:75,cap:99.9,stops:"Waltham → Marlborough → Framingham → Weston"},{id:23,day:"Thu",orders:7,miles:280,cap:48.7,stops:"Westford → ... → North Dartmouth"},{id:24,day:"Thu",orders:7,miles:401,cap:33.5,stops:"Portland → ... → Hanover"},{id:25,day:"Thu",orders:8,miles:384,cap:38.3,stops:"Hartford → ... → Glastonbury"},{id:26,day:"Thu",orders:7,miles:412,cap:56.9,stops:"Groton → ... → New Canaan"},{id:27,day:"Thu",orders:2,miles:354,cap:9.1,stops:"Danbury → Ridgefield"},{id:28,day:"Fri",orders:14,miles:100,cap:82.7,stops:"Reading → Salem → ... → Billerica"},{id:29,day:"Fri",orders:8,miles:254,cap:77.4,stops:"Lawrence → Fitchburg → ... → Framingham"},{id:30,day:"Fri",orders:1,miles:44,cap:98.5,stops:"Weston"},{id:31,day:"Fri",orders:6,miles:412,cap:35.8,stops:"Portland → East Hartford → ... → Hartford"},{id:32,day:"Fri",orders:8,miles:366,cap:48.2,stops:"New Britain → ... → Granby"},{id:33,day:"Fri",orders:7,miles:403,cap:60.1,stops:"Groton → ... → Fairfield"},{id:34,day:"Fri",orders:3,miles:357,cap:18.1,stops:"Danbury → Danbury → Ridgefield"}],"Q1 CW":[{id:1,day:"Mon",orders:2,miles:402,cap:10.2,stops:"Burlington → Burlington"},{id:2,day:"Mon",orders:8,miles:382,cap:81.7,stops:"Hartford → Farmington → ... → Middletown"},{id:3,day:"Mon",orders:13,miles:269,cap:70.7,stops:"Brighton → ... → Windsor Locks"},{id:4,day:"Mon",orders:11,miles:289,cap:63.6,stops:"Bolton → Colchester → ... → Weston"},{id:5,day:"Mon",orders:9,miles:183,cap:93.3,stops:"Billerica → ... → North Berwick"},{id:6,day:"Tue",orders:1,miles:0,cap:15.3,stops:"Wilmington"},{id:7,day:"Tue",orders:7,miles:396,cap:55.9,stops:"Shelton → Norwalk → ... → Stamford"},{id:8,day:"Tue",orders:8,miles:269,cap:43.6,stops:"Groton → ... → Weston"},{id:9,day:"Tue",orders:4,miles:370,cap:25.5,stops:"Dover → Parsonsfield → Rumford → Wenham"},{id:10,day:"Tue",orders:17,miles:64,cap:92.7,stops:"Lynn → Boston → ... → Cambridge"},{id:11,day:"Tue",orders:9,miles:351,cap:52.8,stops:"West Hartland → ... → Bedford"},{id:12,day:"Tue",orders:3,miles:239,cap:18.3,stops:"Hanover → North Andover × 2"},{id:13,day:"Tue",orders:9,miles:254,cap:56.3,stops:"Hartford → ... → Billerica"},{id:14,day:"Wed",orders:8,miles:399,cap:63,stops:"Hamden → ... → Plainville"},{id:15,day:"Wed",orders:11,miles:309,cap:51.4,stops:"East Hartford → ... → Northampton"},{id:16,day:"Wed",orders:8,miles:287,cap:45.5,stops:"Duxbury → Newport → ... → Framingham"},{id:17,day:"Wed",orders:7,miles:277,cap:94.8,stops:"Keene → ... → Brighton"},{id:18,day:"Wed",orders:7,miles:84,cap:96.9,stops:"Boston × 4 → Rockland → Boston × 2"},{id:19,day:"Wed",orders:3,miles:30,cap:92.5,stops:"Tewksbury → Lowell → Tewksbury"},{id:20,day:"Wed",orders:6,miles:38,cap:30.6,stops:"Woburn → Medford → ... → Boston"},{id:21,day:"Thu",orders:8,miles:396,cap:47.6,stops:"New Haven → Norwalk → ... → Danbury"},{id:22,day:"Thu",orders:9,miles:357,cap:56.8,stops:"Hartford → ... → Groton"},{id:23,day:"Thu",orders:4,miles:206,cap:17.9,stops:"Portland × 3 → Westbrook"},{id:24,day:"Thu",orders:11,miles:207,cap:60.1,stops:"Boston → ... → Weston"},{id:25,day:"Thu",orders:18,miles:49,cap:94,stops:"Boston → ... → Boston"},{id:26,day:"Thu",orders:3,miles:47,cap:94.9,stops:"Waltham → Cambridge → Winchester"},{id:27,day:"Thu",orders:10,miles:277,cap:97.8,stops:"Reading → Billerica → ... → Hanover"},{id:28,day:"Fri",orders:1,miles:44,cap:98.5,stops:"Weston"},{id:29,day:"Fri",orders:8,miles:399,cap:63.1,stops:"Fairfield → Stamford → ... → New Britain"},{id:30,day:"Fri",orders:9,miles:368,cap:54.1,stops:"Granby → Farmington → ... → Hartford"},{id:31,day:"Fri",orders:11,miles:305,cap:62.6,stops:"Framingham → ... → Tolland"},{id:32,day:"Fri",orders:13,miles:135,cap:92.9,stops:"Billerica → Fitchburg → ... → Charlestown"},{id:33,day:"Fri",orders:5,miles:222,cap:49.6,stops:"Lawrence → Portland → Salem → Woburn → Reading"}],"Q1 CW+ON":[{id:1,day:"Mon",orders:2,miles:402,cap:10.2,stops:"Burlington → Burlington"},{id:2,day:"Mon",orders:8,miles:382,cap:81.7,stops:"Hartford → Farmington → ... → Middletown"},{id:3,day:"Mon",orders:11,miles:289,cap:63.6,stops:"Bolton → Colchester → ... → Weston"},{id:4,day:"Mon",orders:9,miles:183,cap:93.3,stops:"Billerica → ... → North Berwick"},{id:5,day:"Tue",orders:1,miles:0,cap:15.3,stops:"Wilmington"},{id:6,day:"Tue",orders:8,miles:269,cap:43.6,stops:"Groton → ... → Weston"},{id:7,day:"Tue",orders:17,miles:64,cap:92.7,stops:"Lynn → Boston → ... → Cambridge"},{id:8,day:"Tue",orders:9,miles:351,cap:52.8,stops:"West Hartland → ... → Bedford"},{id:9,day:"Tue",orders:9,miles:254,cap:56.3,stops:"Hartford → ... → Billerica"},{id:10,day:"Wed",orders:7,miles:277,cap:94.8,stops:"Keene → ... → Brighton"},{id:11,day:"Wed",orders:7,miles:84,cap:96.9,stops:"Boston × 4 → Rockland → Boston × 2"},{id:12,day:"Wed",orders:3,miles:30,cap:92.5,stops:"Tewksbury → Lowell → Tewksbury"},{id:13,day:"Thu",orders:9,miles:357,cap:56.8,stops:"Hartford → ... → Groton"},{id:14,day:"Thu",orders:11,miles:207,cap:60.1,stops:"Boston → ... → Weston"},{id:15,day:"Thu",orders:18,miles:49,cap:94,stops:"Boston → ... → Boston"},{id:16,day:"Thu",orders:3,miles:47,cap:94.9,stops:"Waltham → Cambridge → Winchester"},{id:17,day:"Thu",orders:10,miles:277,cap:97.8,stops:"Reading → Billerica → ... → Hanover"},{id:18,day:"Fri",orders:1,miles:44,cap:98.5,stops:"Weston"},{id:19,day:"Fri",orders:8,miles:399,cap:63.1,stops:"Fairfield → ... → New Britain"},{id:20,day:"Fri",orders:9,miles:368,cap:54.1,stops:"Granby → ... → Hartford"},{id:21,day:"Fri",orders:11,miles:305,cap:62.6,stops:"Framingham → ... → Tolland"},{id:22,day:"Fri",orders:13,miles:135,cap:92.9,stops:"Billerica → ... → Charlestown"},{id:23,day:"Fri",orders:5,miles:222,cap:49.6,stops:"Lawrence → Portland → Salem → Woburn → Reading"},{id:24,day:"Mon",orders:16,miles:432,cap:89,stops:"Brighton → ... → North Andover",on:1},{id:25,day:"Wed",orders:16,miles:622,cap:93.1,stops:"Duxbury → Newport → ... → Danbury",on:1},{id:26,day:"Tue",orders:13,miles:419,cap:86.5,stops:"Shelton → Norwalk → ... → Boston",on:1},{id:27,day:"Tue",orders:12,miles:757,cap:88.5,stops:"Dover → Parsonsfield → ... → Plainville",on:1},{id:28,day:"Wed",orders:15,miles:506,cap:69.3,stops:"East Hartford → ... → Westbrook",on:1}],"Q2 Hetero":[{id:1,day:"Mon",orders:4,miles:227,cap:46.9,stops:"Hartford × 3 → Weston",v:"ST"},{id:2,day:"Mon",orders:6,miles:40,cap:65.7,stops:"Charlestown → Boston × 5",v:"ST"},{id:3,day:"Mon",orders:2,miles:402,cap:10.2,stops:"Burlington × 2",v:"Van"},{id:4,day:"Mon",orders:8,miles:382,cap:81.7,stops:"Hartford → Farmington → ... → Middletown",v:"Van"},{id:5,day:"Mon",orders:11,miles:313,cap:71.4,stops:"Windsor Locks → Windsor → ... → Groton",v:"Van"},{id:6,day:"Mon",orders:3,miles:176,cap:64.6,stops:"Billerica → Charlestown → North Berwick",v:"Van"},{id:7,day:"Tue",orders:4,miles:234,cap:62.8,stops:"Weston → Hartford × 3",v:"ST"},{id:8,day:"Tue",orders:8,miles:47,cap:96.7,stops:"Cambridge × 3 → Boston × 5",v:"ST"},{id:9,day:"Tue",orders:4,miles:43,cap:60.6,stops:"Cambridge → Boston × 3",v:"ST"},{id:10,day:"Tue",orders:1,miles:0,cap:15.3,stops:"Wilmington",v:"Van"},{id:11,day:"Tue",orders:10,miles:359,cap:57.5,stops:"West Hartland → ... → Hartford",v:"Van"},{id:12,day:"Tue",orders:11,miles:297,cap:62,stops:"Hanover → ... → Billerica",v:"Van"},{id:13,day:"Wed",orders:8,miles:239,cap:94.2,stops:"Boston × 6 → Hartford → Framingham",v:"ST"},{id:14,day:"Wed",orders:1,miles:12,cap:84.3,stops:"Tewksbury",v:"Van"},{id:15,day:"Wed",orders:6,miles:220,cap:99.1,stops:"Smithfield → Providence → ... → Newport",v:"Van"},{id:16,day:"Wed",orders:6,miles:106,cap:86.4,stops:"Boston × 2 → Rockland → Duxbury → Medford × 2",v:"Van"},{id:17,day:"Thu",orders:4,miles:302,cap:42.9,stops:"New Haven → Hartford → Weston × 2",v:"ST"},{id:18,day:"Thu",orders:8,miles:49,cap:92.5,stops:"Boston × 4 → Allston → Cambridge → Boston × 2",v:"ST"},{id:19,day:"Thu",orders:6,miles:40,cap:65.9,stops:"Boston → Cambridge × 3 → Boston × 2",v:"ST"},{id:20,day:"Thu",orders:8,miles:373,cap:53.3,stops:"Hartford → ... → North Dartmouth",v:"Van"},{id:21,day:"Thu",orders:13,miles:154,cap:74,stops:"Cambridge × 2 → ... → Weston",v:"Van"},{id:22,day:"Thu",orders:9,miles:269,cap:91.4,stops:"Billerica → Westford → ... → Hanover",v:"Van"},{id:23,day:"Thu",orders:3,miles:47,cap:95.9,stops:"Reading → Waltham → Winchester",v:"Van"},{id:24,day:"Fri",orders:8,miles:63,cap:90.3,stops:"Boston × 5 → Cambridge → Waltham → Weston",v:"ST"},{id:25,day:"Fri",orders:1,miles:44,cap:98.5,stops:"Weston",v:"Van"},{id:26,day:"Fri",orders:8,miles:399,cap:63.1,stops:"Fairfield → Stamford → ... → New Britain",v:"Van"},{id:27,day:"Fri",orders:9,miles:368,cap:54.1,stops:"Granby → Farmington → ... → Hartford",v:"Van"},{id:28,day:"Fri",orders:11,miles:305,cap:62.6,stops:"Framingham → ... → Tolland",v:"Van"},{id:29,day:"Fri",orders:6,miles:133,cap:59.5,stops:"Billerica → Clinton → ... → Woburn",v:"Van"},{id:30,day:"Mon",orders:16,miles:604,cap:98.3,stops:"Brighton → ... → Stamford",v:"Van",on:1},{id:31,day:"Tue",orders:18,miles:531,cap:92.4,stops:"Wellesley Hills → ... → Tewksbury",v:"Van",on:1},{id:32,day:"Tue",orders:16,miles:668,cap:81.8,stops:"Dover → ... → Northampton",v:"Van",on:1},{id:33,day:"Wed",orders:12,miles:595,cap:80.9,stops:"Hamden → ... → Westbrook",v:"Van",on:1},{id:34,day:"Thu",orders:12,miles:604,cap:91.9,stops:"Bethany → Norwalk → ... → Reading",v:"Van",on:1}],"Q3 Relaxed":[{id:1,day:"Mon",orders:12,miles:292,cap:98.2,stops:"Windsor Locks × 3 → Windsor × 2 → ... → Farmington × 5"},{id:2,day:"Mon",orders:15,miles:226,cap:86.1,stops:"Hartford × 15"},{id:3,day:"Mon",orders:11,miles:278,cap:68,stops:"East Hartford × 5 → Enfield × 2 → Springfield → Northampton → Worcester → Clinton"},{id:4,day:"Mon",orders:6,miles:28,cap:85.3,stops:"Bedford → Billerica × 5"},{id:5,day:"Tue",orders:7,miles:379,cap:35.2,stops:"Wilton → New Canaan → Stamford × 5"},{id:6,day:"Tue",orders:8,miles:383,cap:72.1,stops:"Fairfield → Stamford × 5 → Old Greenwich → Greenwich"},{id:7,day:"Tue",orders:12,miles:305,cap:79.1,stops:"Wallingford → Hamden × 2 → Bethany × 6 → Meriden → New Britain × 2"},{id:8,day:"Tue",orders:9,miles:376,cap:66.6,stops:"Fairfield → Norwalk × 4 → Stratford × 2 → Shelton → Tolland"},{id:9,day:"Wed",orders:1,miles:44,cap:98.5,stops:"Weston"},{id:10,day:"Wed",orders:11,miles:337,cap:78.3,stops:"Groton → New London × 8 → New Haven → West Haven"},{id:11,day:"Wed",orders:12,miles:287,cap:74.7,stops:"Storrs Mansfield × 3 → Colchester → Groton × 6 → Exeter → Newport"},{id:12,day:"Wed",orders:7,miles:197,cap:100,stops:"East Providence × 2 → Providence → Smithfield → Dayville → Webster → Framingham"},{id:13,day:"Wed",orders:15,miles:152,cap:85.5,stops:"Weston × 7 → Waltham → Auburndale → ... → Framingham × 2"},{id:14,day:"Wed",orders:2,miles:38,cap:85.8,stops:"Waltham × 2"},{id:15,day:"Thu",orders:17,miles:44,cap:98.3,stops:"Boston × 8 → Allston → Cambridge × 8"},{id:16,day:"Thu",orders:9,miles:173,cap:100,stops:"Boston × 3 → Rockland → N. Dartmouth → W. Roxbury → Brighton × 2 → Cambridge"},{id:17,day:"Thu",orders:18,miles:45,cap:95,stops:"Cambridge × 7 → Boston × 11"},{id:18,day:"Fri",orders:1,miles:0,cap:15.3,stops:"Wilmington"},{id:19,day:"Fri",orders:6,miles:432,cap:31.6,stops:"Hanover × 3 → Lebanon → Burlington × 2"},{id:20,day:"Fri",orders:8,miles:367,cap:43,stops:"North Berwick → Parsonsfield → ... → Portland × 3"},{id:21,day:"Fri",orders:10,miles:262,cap:66.1,stops:"Lowell → Westford → ... → Dover"},{id:22,day:"Fri",orders:16,miles:106,cap:75.5,stops:"Boston × 6 → Charlestown × 3 → ... → Boston × 4"},{id:23,day:"Fri",orders:2,miles:12,cap:87.5,stops:"Tewksbury × 2"},{id:24,day:"Fri",orders:10,miles:71,cap:99.9,stops:"North Andover × 2 → Wenham → Lynn → Salem → ... → Reading × 2"},{id:25,day:"Mon",orders:12,miles:372,cap:67.2,stops:"Danbury × 2 → Ridgefield → ... → Marlborough × 2",on:1},{id:26,day:"Tue",orders:16,miles:269,cap:85.6,stops:"Bolton → Manchester → ... → Woburn × 2",on:1},{id:27,day:"Thu",orders:8,miles:63,cap:66.1,stops:"Boston × 4 → Medford × 2 → Winchester → Lawrence",on:1}]};
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let state = { tab: "overview", method: "Q3 Relaxed", compareA: "Q1 CW+ON", compareB: "Q3 Relaxed", dayFilter: "All", sortKey: "id", sortDir: 1 };
+
+function fmt(n) { return n.toLocaleString(); }
+function pct(v, base) { return ((1 - v / base) * 100).toFixed(1); }
+
+// ═══════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════
+function render() {
+  renderTabs();
+  renderPills();
+  renderOverview();
+  renderDaily();
+  renderRoutes();
+  renderCompare();
+  renderGuide();
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('visible'));
+  document.getElementById('tab-' + state.tab)?.classList.add('visible');
+}
+
+function renderTabs() {
+  const tabs = [["overview","Overview"],["daily","Daily Breakdown"],["routes","Route Explorer"],["compare","Head-to-Head"],["guide","Algorithm Guide"]];
+  document.getElementById('tabs').innerHTML = tabs.map(([k,l]) =>
+    `<button class="tab-btn ${state.tab===k?'active':''}" onclick="state.tab='${k}';render()">${l}</button>`
+  ).join('');
+}
+
+function renderPills() {
+  document.getElementById('pills').innerHTML = METHODS.map(m =>
+    `<button class="pill ${state.method===m?'active':''}" style="--c:${COLORS[m]}" onclick="state.method='${m}';render()">
+      <span class="pip" style="background:${COLORS[m]}"></span>${m}
+    </button>`
+  ).join('');
+}
+
+// --- OVERVIEW ---
+function renderOverview() {
+  const m = state.method;
+  const best = m === "Q3 Relaxed";
+  const cards = [
+    {t:"WEEKLY MILES", v:fmt(KPI.weeklyMiles[m]), s:`${pct(KPI.weeklyMiles[m],KPI.weeklyMiles["Q1 NN"])}% vs baseline`, a:COLORS[m], b:best},
+    {t:"TOTAL ROUTES", v:KPI.totalRoutes[m], s:`${KPI.ordersPerRoute[m]} orders/route avg`, b:best},
+    {t:"ANNUAL MILES", v:fmt(KPI.annualMiles[m]), s:`${fmt(KPI.annualMiles["Q1 NN"]-KPI.annualMiles[m])} saved vs NN`, b:best},
+    {t:"FLEET", v:`${KPI.minVehicles[m]} vehicles`, s:`${FEAT[m].fleet} fleet`},
+    {t:"OVERNIGHT", v:`${KPI.overnightRoutes[m]} routes`, s:FEAT[m].on?"Merging enabled":"Not used"},
+    {t:"AVG MI/ROUTE", v:KPI.milesPerRoute[m], s:"Lower is better", b:best},
+  ];
+  document.getElementById('kpi-grid').innerHTML = cards.map(c =>
+    `<div class="kpi ${c.b?'best':''}">
+      ${c.b?'<div class="best-tag">BEST</div>':''}
+      <div class="kpi-label">${c.t}</div>
+      <div class="kpi-value" ${c.a?`style="color:${c.a}"`:''} >${c.v}</div>
+      <div class="kpi-sub">${c.s}</div>
+    </div>`
+  ).join('');
+
+  // Waterfall
+  const base = KPI.weeklyMiles["Q1 NN"], val = KPI.weeklyMiles[m], saved = base - val;
+  const svgW=460,svgH=190,pL=50,pR=20,pT=24,pB=44;
+  const cW=svgW-pL-pR, cH=svgH-pT-pB, bW=cW/3, sc=cH/base;
+  document.getElementById('waterfall-chart').innerHTML = `
+    <svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;max-width:460px;height:${svgH}px">
+      <rect x="${pL+bW*.15}" y="${pT}" width="${bW*.7}" height="${base*sc}" rx="4" fill="${COLORS['Q1 NN']}" opacity=".7"/>
+      <text x="${pL+bW*.5}" y="${pT+base*sc/2+5}" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--mono)">${fmt(base)}</text>
+      <text x="${pL+bW*.5}" y="${svgH-12}" text-anchor="middle" fill="rgba(255,255,255,.45)" font-size="10" font-family="var(--mono)">Q1 NN</text>
+      <rect x="${pL+bW*1.15}" y="${pT}" width="${bW*.7}" height="${saved*sc}" rx="4" fill="${COLORS['Q3 Relaxed']}" opacity=".7"/>
+      <text x="${pL+bW*1.5}" y="${pT+saved*sc/2+5}" text-anchor="middle" fill="white" font-size="12" font-weight="600" font-family="var(--mono)">−${fmt(saved)}</text>
+      <text x="${pL+bW*1.5}" y="${svgH-12}" text-anchor="middle" fill="rgba(255,255,255,.45)" font-size="10" font-family="var(--mono)">Saved</text>
+      <rect x="${pL+bW*2.15}" y="${pT+saved*sc}" width="${bW*.7}" height="${val*sc}" rx="4" fill="${COLORS[m]}" opacity=".8"/>
+      <text x="${pL+bW*2.5}" y="${pT+saved*sc+val*sc/2+5}" text-anchor="middle" fill="white" font-size="13" font-weight="600" font-family="var(--mono)">${fmt(val)}</text>
+      <text x="${pL+bW*2.5}" y="${svgH-12}" text-anchor="middle" fill="rgba(255,255,255,.45)" font-size="10" font-family="var(--mono)">${m}</text>
+      <line x1="${pL+bW*.85}" y1="${pT}" x2="${pL+bW*1.15}" y2="${pT}" stroke="rgba(255,255,255,.12)" stroke-dasharray="3,3"/>
+      <line x1="${pL+bW*1.85}" y1="${pT+saved*sc}" x2="${pL+bW*2.15}" y2="${pT+saved*sc}" stroke="rgba(255,255,255,.12)" stroke-dasharray="3,3"/>
+    </svg>`;
+
+  // Feature matrix
+  const feats = [
+    ["Clark-Wright Construction", m=>FEAT[m].cons==="CW"],
+    ["2-Opt Improvement", m=>FEAT[m].opt],
+    ["Overnight Merging", m=>FEAT[m].on],
+    ["Day Reassignment", m=>FEAT[m].reday],
+    ["Heterogeneous Fleet", m=>FEAT[m].fleet==="Van+ST"],
+    ["Relaxed Schedule", m=>FEAT[m].sched==="Relaxed"],
+  ];
+  document.getElementById('feature-matrix').innerHTML = `<table>
+    <thead><tr><th style="cursor:default">Feature</th>${METHODS.map(m=>`<th style="color:${COLORS[m]};text-align:center;cursor:default">${MSHORT[m]}</th>`).join('')}</tr></thead>
+    <tbody>${feats.map(([l,fn])=>`<tr><td>${l}</td>${METHODS.map(m=>`<td style="text-align:center"><span class="dot ${fn(m)?'on':'off'}"></span></td>`).join('')}</tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// --- BAR CHART helper ---
+function barChartSVG(data, methods, maxVal, h=180, container) {
+  const bW=28, gap=3, gGap=14;
+  const gW = methods.length*(bW+gap)-gap+gGap;
+  const totalW = DAYS.length*gW;
+  const pL=50,pR=14,pT=18,pB=30;
+  const svgW=totalW+pL+pR, cH=h-pT-pB;
+
+  let svg = `<svg viewBox="0 0 ${svgW} ${h}" style="width:100%;height:${h}px">`;
+  [0,.25,.5,.75,1].forEach(f=>{
+    const y=pT+cH*(1-f);
+    svg+=`<line x1="${pL}" x2="${svgW-pR}" y1="${y}" y2="${y}" stroke="rgba(255,255,255,.05)"/>`;
+    svg+=`<text x="${pL-6}" y="${y+4}" text-anchor="end" fill="rgba(255,255,255,.3)" font-size="9" font-family="var(--mono)">${fmt(Math.round(maxVal*f))}</text>`;
+  });
+  DAYS.forEach((day,di)=>{
+    const gx=pL+di*gW;
+    svg+=`<text x="${gx+(gW-gGap)/2}" y="${h-8}" text-anchor="middle" fill="rgba(255,255,255,.45)" font-size="10" font-family="var(--mono)">${day}</text>`;
+    methods.forEach((m,mi)=>{
+      const val=data[day]?.[m]??0;
+      const bh=(val/maxVal)*cH;
+      const bx=gx+mi*(bW+gap);
+      const by=pT+cH-bh;
+      svg+=`<rect x="${bx}" y="${by}" width="${bW}" height="${bh}" rx="3" fill="${COLORS[m]}" opacity=".82"/>`;
+      if(bh>16) svg+=`<text x="${bx+bW/2}" y="${by+13}" text-anchor="middle" fill="rgba(0,0,0,.55)" font-size="8" font-weight="600" font-family="var(--mono)">${val}</text>`;
+    });
+  });
+  svg+=`</svg>`;
+  container.innerHTML = svg;
+}
+
+// --- DAILY ---
+function renderDaily() {
+  document.getElementById('daily-legend').innerHTML = METHODS.map(m=>
+    `<div class="legend-item"><div class="legend-swatch" style="background:${COLORS[m]}"></div>${m}</div>`
+  ).join('');
+  barChartSVG(DAILY, METHODS, 2300, 190, document.getElementById('daily-bar-chart'));
+
+  // Heatmap
+  const nonNN = METHODS.filter(m=>m!=="Q1 NN");
+  let html = `<table><thead><tr><th style="cursor:default">Day</th>${nonNN.map(m=>`<th style="color:${COLORS[m]};text-align:center;cursor:default">${m}</th>`).join('')}</tr></thead><tbody>`;
+  DAYS.forEach(day=>{
+    html+=`<tr><td>${day}</td>`;
+    nonNN.forEach(m=>{
+      const base=DAILY[day]["Q1 NN"], val=DAILY[day][m];
+      const r=((base-val)/base*100), worse=r<0;
+      const bg = worse ? "rgba(224,108,117,.1)" : `rgba(152,195,121,${Math.min(Math.abs(r)/100,.25)})`;
+      const col = worse ? "#E06C75" : r>30 ? "#98C379" : "rgba(255,255,255,.55)";
+      html+=`<td style="text-align:center"><span class="heat" style="background:${bg};color:${col}">${worse?'+':'-'}${Math.abs(r).toFixed(1)}%</span></td>`;
+    });
+    html+=`</tr>`;
+  });
+  // Total row
+  html+=`<tr style="border-top:2px solid rgba(255,255,255,.08)"><td style="font-weight:700">Total</td>`;
+  nonNN.forEach(m=>{
+    const r=((KPI.weeklyMiles["Q1 NN"]-KPI.weeklyMiles[m])/KPI.weeklyMiles["Q1 NN"]*100);
+    html+=`<td style="text-align:center"><span style="font:700 13px/1 var(--mono);color:#98C379">-${r.toFixed(1)}%</span></td>`;
+  });
+  html+=`</tr></tbody></table>`;
+  document.getElementById('heatmap-table').innerHTML = html;
+}
+
+// --- ROUTES ---
+function renderRoutes() {
+  const m = state.method;
+  const routes = ROUTES[m];
+  document.getElementById('route-info').innerHTML = `Showing <strong style="color:${COLORS[m]}">${routes.length} routes</strong> for ${m} — ${MLABEL[m]}`;
+
+  // Day filters
+  document.getElementById('route-day-filters').innerHTML = ["All",...DAYS].map(d=>
+    `<button class="day-btn ${state.dayFilter===d?'active':''}" onclick="state.dayFilter='${d}';renderRoutes()">${d}</button>`
+  ).join('');
+
+  let filtered = state.dayFilter==="All" ? [...routes] : routes.filter(r=>r.day===state.dayFilter);
+  filtered.sort((a,b)=>{
+    let va=a[state.sortKey],vb=b[state.sortKey];
+    if(typeof va==='string') return state.sortDir*va.localeCompare(vb);
+    return state.sortDir*((va??0)-(vb??0));
+  });
+
+  const isHetero = m==="Q2 Hetero";
+  let html = `<table><thead><tr>
+    <th onclick="toggleSort('id')"># ${state.sortKey==='id'?(state.sortDir>0?'↑':'↓'):''}</th>
+    <th onclick="toggleSort('day')">Day ${state.sortKey==='day'?(state.sortDir>0?'↑':'↓'):''}</th>
+    <th onclick="toggleSort('orders')">Orders ${state.sortKey==='orders'?(state.sortDir>0?'↑':'↓'):''}</th>
+    <th onclick="toggleSort('miles')">Miles ${state.sortKey==='miles'?(state.sortDir>0?'↑':'↓'):''}</th>
+    <th onclick="toggleSort('cap')">Cap % ${state.sortKey==='cap'?(state.sortDir>0?'↑':'↓'):''}</th>
+    ${isHetero?'<th style="cursor:default">Vehicle</th>':''}
+    <th style="cursor:default">Stop Sequence</th>
+  </tr></thead><tbody>`;
+
+  filtered.forEach(r=>{
+    const miCol = r.miles>400?'#E06C75':r.miles<100?'#98C379':'#E2E4EA';
+    const capCol = r.cap>90?'#98C379':r.cap>60?'#61AFEF':'#E5C07B';
+    html+=`<tr class="${r.on?'overnight':''}">
+      <td style="color:rgba(255,255,255,.35)">${r.id}</td>
+      <td>${r.day}</td>
+      <td>${r.orders}</td>
+      <td style="color:${miCol}">${r.miles}</td>
+      <td><div class="cap-bar"><div class="cap-track"><div class="cap-fill" style="width:${Math.min(r.cap,100)}%;background:${capCol}"></div></div><span class="cap-label">${r.cap}%</span></div></td>
+      ${isHetero?`<td style="color:${r.v==='ST'?'#C678DD':'#61AFEF'}">${r.v||'Van'}</td>`:''}
+      <td style="font-size:10px;color:rgba(255,255,255,.35);max-width:260px;overflow:hidden;text-overflow:ellipsis">${r.stops}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table>`;
+  document.getElementById('route-table-wrap').innerHTML = html;
+  document.getElementById('route-count').textContent = `${filtered.length} routes shown`;
+
+  // Distributions
+  const bMiles = [{l:"0-100",c:routes.filter(r=>r.miles<=100).length},{l:"101-250",c:routes.filter(r=>r.miles>100&&r.miles<=250).length},{l:"251-400",c:routes.filter(r=>r.miles>250&&r.miles<=400).length},{l:"400+",c:routes.filter(r=>r.miles>400).length}];
+  const bCap = [{l:"<40%",c:routes.filter(r=>r.cap<40).length,cl:"#E06C75"},{l:"40-70%",c:routes.filter(r=>r.cap>=40&&r.cap<70).length,cl:"#E5C07B"},{l:"70-90%",c:routes.filter(r=>r.cap>=70&&r.cap<90).length,cl:"#61AFEF"},{l:"90%+",c:routes.filter(r=>r.cap>=90).length,cl:"#98C379"}];
+  const mxM=Math.max(...bMiles.map(b=>b.c),1), mxC=Math.max(...bCap.map(b=>b.c),1);
+  document.getElementById('route-distributions').innerHTML = `
+    <div class="panel"><div class="panel-title" style="font-size:11px">MILES DISTRIBUTION</div>
+      ${bMiles.map(b=>`<div class="dist-row"><span class="dist-label">${b.l}</span><div class="dist-track"><div class="dist-fill" style="width:${(b.c/mxM)*100}%;background:${COLORS[m]}"></div></div><span class="dist-count">${b.c}</span></div>`).join('')}
+    </div>
+    <div class="panel"><div class="panel-title" style="font-size:11px">CAPACITY UTILIZATION</div>
+      ${bCap.map(b=>`<div class="dist-row"><span class="dist-label">${b.l}</span><div class="dist-track"><div class="dist-fill" style="width:${(b.c/mxC)*100}%;background:${b.cl}"></div></div><span class="dist-count">${b.c}</span></div>`).join('')}
+    </div>`;
+}
+
+function toggleSort(key) {
+  if(state.sortKey===key) state.sortDir*=-1;
+  else { state.sortKey=key; state.sortDir=1; }
+  renderRoutes();
+}
+
+// --- COMPARE ---
+function renderCompare() {
+  const a=state.compareA, b=state.compareB;
+  document.getElementById('compare-controls').innerHTML = `
+    <div><label>Method A</label><select onchange="state.compareA=this.value;render()">${METHODS.map(m=>`<option ${m===a?'selected':''} value="${m}">${m}</option>`).join('')}</select></div>
+    <div class="compare-vs">vs</div>
+    <div><label>Method B</label><select onchange="state.compareB=this.value;render()">${METHODS.map(m=>`<option ${m===b?'selected':''} value="${m}">${m}</option>`).join('')}</select></div>`;
+
+  const metrics = [
+    ["Weekly Miles","weeklyMiles","lower"],["Annual Miles","annualMiles","lower"],["Total Routes","totalRoutes","lower"],
+    ["Min Vehicles","minVehicles","lower"],["Orders/Route","ordersPerRoute","higher"],["Miles/Route","milesPerRoute","lower"],
+    ["Overnight Routes","overnightRoutes",null]
+  ];
+  let html = `<table><thead><tr><th style="cursor:default">Metric</th><th style="color:${COLORS[a]};text-align:center;cursor:default">${a}</th><th style="color:${COLORS[b]};text-align:center;cursor:default">${b}</th><th style="text-align:center;cursor:default">Δ</th><th style="text-align:center;cursor:default">Winner</th></tr></thead><tbody>`;
+  metrics.forEach(([label,key,better])=>{
+    const va=KPI[key][a], vb=KPI[key][b], diff=vb-va;
+    const winner = better==="lower"?(va<vb?a:va>vb?b:"Tie"):better==="higher"?(va>vb?a:va<vb?b:"Tie"):"—";
+    const fv = v => typeof v==='number'&&Math.abs(v)>999?fmt(v):v;
+    html+=`<tr>
+      <td>${label}</td>
+      <td style="text-align:center;font-weight:600;color:${winner===a?'#98C379':'#E2E4EA'}">${fv(va)}</td>
+      <td style="text-align:center;font-weight:600;color:${winner===b?'#98C379':'#E2E4EA'}">${fv(vb)}</td>
+      <td style="text-align:center;color:rgba(255,255,255,.35)">${diff>0?'+':''}${fv(diff)}</td>
+      <td style="text-align:center;color:${winner==='—'?'rgba(255,255,255,.25)':COLORS[winner]||'#E2E4EA'}">${winner}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table>`;
+  document.getElementById('compare-table').innerHTML = html;
+
+  barChartSVG(DAILY, [a,b], 2300, 165, document.getElementById('compare-bar-chart'));
+  document.getElementById('compare-legend').innerHTML = [a,b].map(m=>
+    `<div class="legend-item"><div class="legend-swatch" style="background:${COLORS[m]}"></div>${m}</div>`
+  ).join('');
+}
+
+// --- GUIDE ---
+function renderGuide() {
+  document.getElementById('tab-guide').innerHTML = GUIDE.map(g=>{
+    const active = state.method===g.m;
+    return `<div class="algo-card ${active?'active-card':''}" style="--c:${COLORS[g.m]}" onclick="state.method='${g.m}';render()">
+      <div class="algo-header">
+        <span class="pip" style="width:10px;height:10px;border-radius:50%;background:${COLORS[g.m]};display:inline-block"></span>
+        <span class="name" style="color:${COLORS[g.m]}">${g.m}</span>
+        <span class="desc">${MLABEL[g.m]}</span>
+        ${g.m==='Q3 Relaxed'?'<span class="rec">RECOMMENDED</span>':''}
+      </div>
+      <div class="algo-grid">
+        <div><div class="col-title">STRENGTHS</div><div class="col-body">${g.s}</div></div>
+        <div><div class="col-title">WEAKNESSES</div><div class="col-body">${g.w}</div></div>
+        <div><div class="col-title">BEST USE CASE</div><div class="col-body" style="color:${COLORS[g.m]};font-weight:500">${g.u}</div></div>
+      </div>
+      <div class="algo-stats">
+        <span>${fmt(KPI.weeklyMiles[g.m])} mi/wk</span>
+        <span>${KPI.totalRoutes[g.m]} routes</span>
+        <span>${KPI.minVehicles[g.m]} vehicles</span>
+        <span style="color:rgba(255,255,255,.2)">${pct(KPI.weeklyMiles[g.m],KPI.weeklyMiles["Q1 NN"])}% savings vs baseline</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Initial render
+render();
+</script>
+</body>
+</html>
